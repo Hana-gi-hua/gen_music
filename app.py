@@ -24,6 +24,19 @@ def display_image(img_url):
     else:
         st.error("Failed to display image.")
         return None
+    
+
+def render_message(message):
+    with st.chat_message(message["role"]):
+        if message['role'] == 'ai':
+            if message['content']['type'] == 'image':
+                # キャッシュデータがある場合、これを使って表示
+                st.image(message['content']['data'])
+            else:
+                # URLがある場合、URLから画像を表示
+                st.write(message["content"]['data'])
+        else:
+            st.write(message["content"]['data'])
 
 def main():
     ## チャット機能
@@ -34,52 +47,58 @@ def main():
 
     ## チャット履歴表示
     for message in st.session_state.messages:
-        if message['role'] == 'ai' and message['content']['type'] == 'image':
-            with st.chat_message(message["role"]):
-                if 'data' in message['content']:
-                    # キャッシュデータがある場合、これを使って表示
-                    st.image(message['content']['data'])
-                else:
-                    # URLがある場合、URLから画像を表示
-                    st.image(message['content']['url'])
-        else:
-            with st.chat_message(message["role"]):
-                st.write(message["content"]['data'])
+        render_message(message)
 
 
     ## 各会話
     input_prompt = st.chat_input('Say someting')
 
     if input_prompt:
-        with st.chat_message('user'):
-            st.write(input_prompt)
-            st.session_state.messages.append({'role': 'user', 
-                                              'content': {
-                                                            'type': 'text',
-                                                            'url': '',
-                                                            'data': input_prompt,
-                                                        }})
+        # ユーザーのメッセージをセッションステートに追加
+        user_message = {
+            'role': 'user',
+            'content': {
+                'type': 'text',
+                'url': '',
+                'data': input_prompt,
+            }
+        }
+        st.session_state.messages.append(user_message)
 
-        with st.chat_message('ai'):
-            response = task_allocator(input_prompt)
-            print(response)
+        # ユーザーのメッセージを即座にレンダリング
+        render_message(user_message)
 
-            if validators.url(response):#このresponseは画像URL
-                img_data = display_image(response)
-                st.session_state.messages.append({'role': 'ai', 
-                                                  'content': {
-                                                            'type': 'image',
-                                                            'url': response,
-                                                            'data': img_data  # キャッシュされた画像データ
-                                                        }})
-            else:
-                st.write(response)
-                st.session_state.messages.append({'role': 'ai', 
-                                                  'content': {
-                                                            'type': 'text',
-                                                            'url': '',
-                                                            'data': response,
-                                                        } })
+
+        # AIの応答を取得
+        response = task_allocator(input_prompt)
+        print(response)
+
+        if validators.url(response):  # 画像URLの場合
+            img_data = fetch_image(response)  # 画像を取得
+            ai_message = {
+                'role': 'ai',
+                'content': {
+                    'type': 'image',
+                    'url': response,
+                    'data': img_data  # キャッシュされた画像データ
+                }
+            }
+            st.session_state.messages.append(ai_message)
+        else:  # テキストの場合
+            ai_message = {
+                'role': 'ai',
+                'content': {
+                    'type': 'text',
+                    'url': '',
+                    'data': response,
+                }
+            }
+            st.session_state.messages.append(ai_message)
+
+        # AIの応答を即座にレンダリング
+        render_message(ai_message)
+
+
         
 if __name__ == '__main__':
     main()
